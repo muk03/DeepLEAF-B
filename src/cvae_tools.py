@@ -129,6 +129,16 @@ def loss_function(reconstruction, x, mean, logvar, beta=0.001):
     
     return MSE
 
+def loss_function_KLD(reconstruction, x, mean, logvar, beta=0.1, target_std=1.0):
+    MSE = torch.nn.functional.mse_loss(reconstruction, x, reduction='mean')
+
+    target_logvar = torch.log(torch.tensor(target_std ** 2)).to(x.device)
+    KLD = -0.5 * torch.mean(1 + (logvar - target_logvar) 
+                                - (logvar.exp() / target_std ** 2))
+    
+    loss = MSE + beta * KLD
+    return loss
+
 # =====================================================================
 
 def train_epoch_early_CVAE(model, dataloader, dataloader_validation, criterion, optimizer, device):
@@ -147,6 +157,9 @@ def train_epoch_early_CVAE(model, dataloader, dataloader_validation, criterion, 
     """
     model.train()  # Set the model to training mode
     total_loss = 0.0
+    total_MSE = 0.0
+    total_KLD = 0.0
+
     num_batches = len(dataloader)
 
     for batch_idx, (inputs, targets) in enumerate(dataloader):
@@ -155,12 +168,14 @@ def train_epoch_early_CVAE(model, dataloader, dataloader_validation, criterion, 
         optimizer.zero_grad()  # Zero the gradients
 
         reconstruction, mean, logvar = model(inputs)  # Forward pass
-        loss = criterion(reconstruction, targets, mean, logvar)  # Calculate loss
+        loss, MSE, KLD = criterion(reconstruction, targets, mean, logvar)  # Calculate loss
 
         loss.backward()  # Backward pass
         optimizer.step()  # Update weights
         
-        total_loss += loss.item()  # Accumulate the loss
+        total_loss += loss.item()
+        total_MSE += MSE.item()
+        total_KLD += KLD.item() 
 
     with torch.no_grad():
         model.eval()
@@ -172,15 +187,17 @@ def train_epoch_early_CVAE(model, dataloader, dataloader_validation, criterion, 
             inputs, targets = inputs.to(device), targets.to(device)
 
             outputs, mu, logstd = model(inputs)
-            validation_loss = criterion(outputs, targets, mu, logstd)
+            validation_loss, _, _ = criterion(outputs, targets, mu, logstd)
             
             total_validation_loss += validation_loss.item()
 
         average_validation_loss = total_validation_loss / num_batches_validation
         
     average_loss = total_loss / num_batches  # Calculate average loss for the epoch
+    avg_MSE = total_MSE /num_batches
+    avg_KLD = total_KLD / num_batches
 
-    return average_loss, average_validation_loss
+    return average_loss, average_validation_loss, avg_MSE, avg_KLD
 
 # =====================================================================
 
@@ -208,7 +225,7 @@ def train_epoch_CVAE(model, dataloader, criterion, optimizer, device):
         optimizer.zero_grad()  # Zero the gradients
 
         reconstruction, mean, logvar = model(inputs)  # Forward pass
-        loss = criterion(reconstruction, targets, mean, logvar)  # Calculate loss
+        loss, _, _ = criterion(reconstruction, targets, mean, logvar)  # Calculate loss
 
         loss.backward()  # Backward pass
         optimizer.step()  # Update weights
@@ -242,7 +259,7 @@ def test_epoch_CVAE(model, dataloader, criterion, device):
             inputs, targets = inputs.to(device), targets.to(device)  # Move data to the specified device
             
             reconstruction, mean, logvar = model(inputs)  # Forward pass
-            loss = criterion(reconstruction, targets, mean, logvar)  # Calculate loss
+            loss, _, _ = criterion(reconstruction, targets, mean, logvar)  # Calculate loss
             
             total_loss += loss.item()  # Accumulate the loss
 
@@ -269,9 +286,6 @@ def test_visualise_4d_CVAE(model, dataloader, device, train_index, out_path, nbi
     """
     model.eval()
 
-    bin_edges = np.linspace(0, 1, nbins + 1)
-    bins = (bin_edges[:-1] + bin_edges[1:]) / 2
-
     with torch.no_grad():
         for batch_idx, (inputs, targets) in tqdm(enumerate(dataloader)):
             inputs, targets = inputs.to(device), targets.to(device)  # Move data to the specified device
@@ -279,20 +293,19 @@ def test_visualise_4d_CVAE(model, dataloader, device, train_index, out_path, nbi
             reconstruction = model.generate_histogram(inputs)   # Forward pass
             
             outputs = reconstruction.to('cpu')
-            reshaped_outputs = np.array(outputs.reshape(nbins, nbins, nbins, nbins))
 
             fname = os.path.basename(f'{filenames[train_index + batch_idx]}.csv')
+            target_file = out_path + f'/normal_targets/{fname}'
 
-            # Create meshgrid for the bin centers
-            xpos, ypos, zpos, wpos = np.meshgrid(bins, bins, bins, bins, indexing="ij")
+            eos_file = pd.read_csv(target_file)
 
             # Flatten the arrays and create the resulting DataFrame
             result_df = pd.DataFrame({
-                'q2': xpos.ravel(),
-                'cos_theta_l': ypos.ravel(),
-                'cos_theta_d': zpos.ravel(),
-                'phi': wpos.ravel(),
-                'bin_height': reshaped_outputs.ravel()
+                'q2': eos_file['q2'].values,
+                'cos_theta_l': eos_file['cos_theta_l'].values,
+                'cos_theta_d': eos_file['cos_theta_d'].values,
+                'phi': eos_file['phi'].values,
+                'bin_height': outputs.ravel()
             })
 
             os.makedirs(os.path.join(out_path, 'model_outputs'), exist_ok=True)
@@ -335,12 +348,12 @@ def BO_CVAE(path, train_inputs, train_targets):
     dec_drop = []
 
     for n in range(n_enc):
-            enc.append(opt[f'encoder_layer_{n}'])
-            enc_drop.append(opt[f'dropout_enc_{n}'])
+        enc.append(opt[f'encoder_layer_{n}'])
+        enc_drop.append(opt[f'dropout_enc_{n}'])
 
     for m in range(n_dec):
-            dec.append(opt[f'decoder_layer_{m}'])
-            dec_drop.append(opt[f'dropout_dec_{m}'])
+        dec.append(opt[f'decoder_layer_{m}'])
+        dec_drop.append(opt[f'dropout_dec_{m}'])
 
     latent_shape = opt['latent_dim']
 

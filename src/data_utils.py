@@ -63,10 +63,9 @@ class data_manipulator():
         """
         # Read and normalize the data
         data = pd.read_csv(self.data_pth)
-        norm_data = (data - data.min()) / (data.max() - data.min())
 
         # - Changes really start here -
-        hist, edges = np.histogramdd(norm_data.values, bins=nbins)
+        hist, edges = np.histogramdd(data.values, bins=nbins)
 
         bin_centers = [0.5 * (edges[i][1:] + edges[i][:-1]) for i in range(4)]
         xpos, ypos, zpos, wpos = np.meshgrid(*bin_centers, indexing="ij")
@@ -81,16 +80,6 @@ class data_manipulator():
             'phi': wpos.ravel(),
             'bin_height': hist.ravel()
         })
-
-        # =-=-= Comment in and out if we want background or not =-=-=
-        
-        def cos_squared(a, b, c, d, area, amt):
-            return 1/5000 * amt * area * (np.cos(np.pi * (a + b + c + d)) ** 2)
-
-        area_hist = result_df['bin_height'].sum()
-        list_background = cos_squared(result_df['q2'], result_df['cos_theta_l'], result_df['cos_theta_d'], result_df['phi'], area_hist, ratio)
-
-        result_df['bin_height'] = result_df['bin_height'].values + list_background
 
         return result_df
     
@@ -264,6 +253,12 @@ def load_minmax_heights(data_dir, test_idx):
         return tensor_inputs, tensor_targets, test_inputs, test_targets, filenames
 
     else:
+        rescale_dict = {'min_height' : min_height,
+                        'max_height' : max_height}
+        
+        with open(f'{data_dir}/rescale_info.json', 'w') as f:
+            json.dump(rescale_dict, f, indent=4)
+
     # =-=-= Now do the same normalisation, but applied piece by piece to the csvs =-=-=
         for event_data in tqdm(files):
             binned_data = pd.read_csv(event_data, index_col=0)

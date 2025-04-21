@@ -226,9 +226,6 @@ def test_visualise_4d(model, dataloader, device, train_index, out_path, nbins, f
     """
     model.eval()
 
-    bin_edges = np.linspace(0, 1, nbins + 1)
-    bins = (bin_edges[:-1] + bin_edges[1:]) / 2
-
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(dataloader):
             inputs, targets = inputs.to(device), targets.to(device)  # Move data to the specified device
@@ -236,24 +233,23 @@ def test_visualise_4d(model, dataloader, device, train_index, out_path, nbins, f
             outputs = model(inputs)  # Forward pass
             
             outputs = outputs.to('cpu')
-            reshaped_outputs = np.array(outputs.reshape(nbins, nbins, nbins, nbins))
 
             fname = os.path.basename(f'{filenames[train_index + batch_idx]}.csv')
+            target_file = out_path + f'/normal_targets/{fname}'
 
-            # Create meshgrid for the bin centers
-            xpos, ypos, zpos, wpos = np.meshgrid(bins, bins, bins, bins, indexing="ij")
+            eos_file = pd.read_csv(target_file)
 
             # Flatten the arrays and create the resulting DataFrame
             result_df = pd.DataFrame({
-                'q2': xpos.ravel(),
-                'cos_theta_l': ypos.ravel(),
-                'cos_theta_d': zpos.ravel(),
-                'phi': wpos.ravel(),
-                'bin_height': reshaped_outputs.ravel()
+                'q2': eos_file['q2'].values,
+                'cos_theta_l': eos_file['cos_theta_l'].values,
+                'cos_theta_d': eos_file['cos_theta_d'].values,
+                'phi': eos_file['phi'].values,
+                'bin_height': outputs.ravel()
             })
 
-            os.makedirs(os.path.join(out_path, 'model_outputs'), exist_ok=True)
-            result_df.to_csv(os.path.join(out_path, 'model_outputs', fname), index=False)
+            os.makedirs(os.path.join(out_path, 'linear_model_outputs'), exist_ok=True)
+            result_df.to_csv(os.path.join(out_path, 'linear_model_outputs', fname), index=False)
 
     return result_df
 

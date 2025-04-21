@@ -501,42 +501,42 @@ class CVAE_Opt(nn.Module):
             return generated_histogram
         
 def BO_CVAE(path, train_inputs, train_targets):
-       cfg_CVAE = {'batch_train' : 64,
-                     'batch_test' : 8,
-                     'epochs' : 150,
-                     'dim': [len(train_inputs[0]), len(train_targets[0])],
-                     }
-       
-       opt_path = path.split('/')[1] + '.json'
+    cfg_CVAE = {'batch_train' : 64,
+                    'batch_test' : 8,
+                    'epochs' : 150,
+                    'dim': [len(train_inputs[0]), len(train_targets[0])],
+                    }
+    
+    opt_path = path.split('/')[1] + '.json'
 
-       with open(opt_path, 'r') as f:
-              opt = json.load(f)
+    with open(opt_path, 'r') as f:
+            opt = json.load(f)
 
-       n_enc = opt['n_encoder_layers']
-       n_dec = opt['n_decoder_layers']
+    n_enc = opt['n_encoder_layers']
+    n_dec = opt['n_decoder_layers']
 
-       enc = []
-       enc_drop = []
-       dec = []
-       dec_drop = []
+    enc = []
+    enc_drop = []
+    dec = []
+    dec_drop = []
 
-       for n in range(n_enc):
-              enc.append(opt[f'encoder_layer_{n}'])
-              enc_drop.append(opt[f'dropout_enc_{n}'])
+    for n in range(n_enc):
+        enc.append(opt[f'encoder_layer_{n}'])
+        enc_drop.append(opt[f'dropout_enc_{n}'])
 
-       for m in range(n_dec):
-              dec.append(opt[f'decoder_layer_{m}'])
-              dec_drop.append(opt[f'dropout_dec_{m}'])
+    for m in range(n_dec):
+        dec.append(opt[f'decoder_layer_{m}'])
+        dec_drop.append(opt[f'dropout_dec_{m}'])
 
-       latent_shape = opt['latent_dim']
+    latent_shape = opt['latent_dim']
 
-       cfg_CVAE['encoder'] = enc
-       cfg_CVAE['encoder_drop'] = enc_drop
+    cfg_CVAE['encoder'] = enc
+    cfg_CVAE['encoder_drop'] = enc_drop
 
-       cfg_CVAE['decoder'] = dec
-       cfg_CVAE['decoder_drop'] = dec_drop
+    cfg_CVAE['decoder'] = dec
+    cfg_CVAE['decoder_drop'] = dec_drop
 
-       cfg_CVAE['latent_dim'] = latent_shape
+    cfg_CVAE['latent_dim'] = latent_shape
 
-       return cfg_CVAE
+    return cfg_CVAE
 
